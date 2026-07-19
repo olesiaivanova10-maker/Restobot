@@ -119,7 +119,8 @@ async def handle_links(callback: types.CallbackQuery, callback_data: MenuCallbac
         
     links_text = (
         "🔗 <b>Полезные ссылки:</b>\n\n"
-        "🗄 <b>БД (веб-панель):</b> http://2.27.43.134:8080 (пароль: restoadmin)\n"
+        "🗄 <b>БД основная:</b> http://2.27.43.134:8080 (пароль: restoadmin)\n"
+        "🧪 <b>БД DEV:</b> http://2.27.43.134:8081 (пароль: restoadmin)\n"
         f"📊 <b>Google Таблица:</b> https://docs.google.com/spreadsheets/d/{GOOGLE_SHEET_ID}/edit\n"
         "🧠 <b>Провайдер ИИ:</b> https://aitunnel.ru/\n"
         "☁️ <b>Хостинг/ВМ:</b> https://play2go.cloud/"
