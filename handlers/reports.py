@@ -75,21 +75,27 @@ async def process_report_payload(messages_packet: list, state: FSMContext):
     
     user_data = await state.get_data()
     accumulated_text = user_data.get("accumulated_text", "")
-    accumulated_photo_ids = user_data.get("accumulated_photo_ids", [])
+    stale_photo_ids = user_data.get("accumulated_photo_ids", [])
+    current_photo_ids = []
     image_paths = []
     
     try:
+        if stale_photo_ids:
+            logger.warning(
+                f"Clearing {len(stale_photo_ids)} stale photo(s) from state before AI request for user {user_id}"
+            )
+            await state.update_data(accumulated_photo_ids=[])
+
         for msg in messages_packet:
             if msg.text: accumulated_text += msg.text + "\n"
             if msg.caption: accumulated_text += msg.caption + "\n"
             if msg.photo:
-                accumulated_photo_ids.append(msg.photo[-1].file_id)
+                current_photo_ids.append(msg.photo[-1].file_id)
 
-        # Сохраняем обновленные данные в стейт
-        await state.update_data(accumulated_text=accumulated_text, accumulated_photo_ids=accumulated_photo_ids)
+        # Текст можно хранить как историю, а фото держим только на один AI-запрос.
+        await state.update_data(accumulated_text=accumulated_text, accumulated_photo_ids=[])
         
-        # Скачиваем все накопленные фото
-        for file_id in accumulated_photo_ids:
+        for file_id in current_photo_ids:
             tmp_path = f"img_{file_id}.jpg"
             await msg.bot.download(file_id, destination=tmp_path)
             image_paths.append(tmp_path)
@@ -182,6 +188,7 @@ async def process_report_payload(messages_packet: list, state: FSMContext):
 
     except Exception as e:
         logger.error(f"Ошибка парсинга пакета: {e}")
+        await state.update_data(accumulated_photo_ids=[])
         await status_msg.edit_text(f"❌ Произошла ошибка: {e}")
     finally:
         for p in image_paths:
