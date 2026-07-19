@@ -27,9 +27,12 @@ zip -r restobot.zip . \
     -x "node_modules/*" \
     -x ".git/*" \
     -x "__pycache__/*" \
+    -x "*/__pycache__/*" \
     -x "*.zip" \
     -x ".DS_Store" \
     -x ".env" \
+    -x "credentials.json" \
+    -x "logs/*" \
     -x "data/*"
 
 echo "🚀 Загружаем на сервер ${DEPLOY_HOST}..."
