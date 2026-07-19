@@ -8,7 +8,7 @@ from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from core.logger import logger
 from core.config import AI_PROMPTS, STEPS_OPEN, STEPS_CLOSE, LIST_MAPPING
 from states.report import ReportSteps
-from services.ai import encode_image_to_base64, get_parsed_report
+from services.ai import encode_image_to_base64, get_parsed_report, optimize_image_for_ai
 from services.google_sheets import update_google_sheet
 from services.db import mark_shift_open, mark_shift_closed
 
@@ -78,6 +78,7 @@ async def process_report_payload(messages_packet: list, state: FSMContext):
     stale_photo_ids = user_data.get("accumulated_photo_ids", [])
     current_photo_ids = []
     image_paths = []
+    image_stats = []
     
     try:
         if stale_photo_ids:
@@ -98,6 +99,7 @@ async def process_report_payload(messages_packet: list, state: FSMContext):
         for file_id in current_photo_ids:
             tmp_path = f"img_{file_id}.jpg"
             await msg.bot.download(file_id, destination=tmp_path)
+            image_stats.append(optimize_image_for_ai(tmp_path))
             image_paths.append(tmp_path)
 
         report_type = user_data["chosen_type"]
@@ -112,6 +114,17 @@ async def process_report_payload(messages_packet: list, state: FSMContext):
                 "type": "image_url", 
                 "image_url": {"url": f"data:image/jpeg;base64,{encode_image_to_base64(path)}"}
             })
+
+        if image_stats or stale_photo_ids:
+            original_total = sum(item["original_size"] for item in image_stats)
+            optimized_total = sum(item["optimized_size"] for item in image_stats)
+            logger.info(
+                "AI report request prepared: "
+                f"user={user_id}, current_photos={len(current_photo_ids)}, "
+                f"stale_photos_cleared={len(stale_photo_ids)}, "
+                f"image_bytes={original_total}->{optimized_total}, "
+                f"text_chars={len(ai_text)}"
+            )
 
         parsed_blocks = await get_parsed_report(report_type, AI_PROMPTS[report_type], ai_contents)
 

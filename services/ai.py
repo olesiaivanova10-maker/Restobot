@@ -1,12 +1,17 @@
 import json
 import base64
+import os
 from typing import Dict, Tuple
 from openai import AsyncOpenAI
+from PIL import Image, ImageOps
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from core.config import PROXYAPI_KEY, AI_BASE_URL, AI_MODEL
 
 ai_client = AsyncOpenAI(api_key=PROXYAPI_KEY, base_url=AI_BASE_URL)
+
+MAX_AI_IMAGE_SIDE = 1024
+AI_IMAGE_QUALITY = 70
 
 def clean_json_markdown(text: str) -> str:
     text = text.strip()
@@ -85,4 +90,18 @@ def encode_image_to_base64(image_path: str) -> str:
     with open(image_path, "rb") as image_file:
         return base64.b64encode(image_file.read()).decode('utf-8')
 
+def optimize_image_for_ai(image_path: str) -> dict:
+    original_size = os.path.getsize(image_path)
 
+    with Image.open(image_path) as image:
+        image = ImageOps.exif_transpose(image)
+        image.thumbnail((MAX_AI_IMAGE_SIDE, MAX_AI_IMAGE_SIDE))
+        if image.mode not in ("RGB", "L"):
+            image = image.convert("RGB")
+        image.save(image_path, format="JPEG", quality=AI_IMAGE_QUALITY, optimize=True)
+
+    optimized_size = os.path.getsize(image_path)
+    return {
+        "original_size": original_size,
+        "optimized_size": optimized_size,
+    }
