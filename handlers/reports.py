@@ -16,6 +16,19 @@ reports_router = Router()
 
 user_payload_storage = {}
 
+def is_missing_report_value(value) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, dict):
+        status = str(value.get("status", "")).strip().lower()
+        actual_value = value.get("value")
+        if status == "пропущено":
+            return True
+        return is_missing_report_value(actual_value)
+
+    text = str(value).strip()
+    return text == "" or text.lower() == "пропущено"
+
 async def ask_missing_items(user_id: int, missing_queue: list[str], message: types.Message, state: FSMContext):
     items_text = "\n".join([f"— {item}" for item in missing_queue])
     text = (
@@ -135,13 +148,13 @@ async def process_report_payload(messages_packet: list, state: FSMContext):
                     val = v
                     break
             
-            if val is not None and str(val).lower() != "пропущено":
+            if not is_missing_report_value(val):
                 collected_data[step] = val
 
         missing_queue = []
         for step in expected_steps:
             val = collected_data.get(step)
-            if val is None or str(val).strip() == "" or str(val).strip().lower() == "пропущено":
+            if is_missing_report_value(val):
                 missing_queue.append(step)
 
         if missing_queue:
@@ -185,7 +198,7 @@ async def process_report_payload(messages_packet: list, state: FSMContext):
 
             if missing_queue:
                 # После попытки заполнения, если всё ещё есть пропуски – оставляем их для обычного запроса
-                user_data["missing_queue"] = missing_queue
+                await state.update_data(collected_data=collected_data, missing_queue=missing_queue)
                 await ask_missing_items(user_id, missing_queue, message, state)
                 return
 
