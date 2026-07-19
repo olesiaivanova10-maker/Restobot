@@ -1,0 +1,44 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: restobot
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      # Use the docker-compose redis service by default
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+    volumes:
+      # Map logs directory
+      - ./logs:/app/logs
+      # Map data directory for SQLite DB
+      - ./data:/app/data
+      # Bind mount credentials file for Google Sheets
+      - ./credentials.json:/app/credentials.json:ro
+
+  redis:
+    image: redis:7-alpine
+    container_name: restobot_redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+
+  db-web:
+    image: coleifer/sqlite-web
+    container_name: restobot_db_web
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      - SQLITE_DATABASE=restobot.db
+      - SQLITE_WEB_PASSWORD=restoadmin
+    command: sqlite_web /data/restobot.db -x -H 0.0.0.0 -p 8080
+
+volumes:
+  redis_data:

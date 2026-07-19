@@ -1,0 +1,11 @@
+aiogram>=3.4.1
+openai>=1.14.2
+gspread>=6.0.2
+python-dotenv>=1.0.1
+loguru>=0.7.2
+redis>=5.0.3
+pydantic-settings>=2.2.1
+tenacity>=8.2.3
+sqlalchemy>=2.0.29
+aiosqlite>=0.20.0
+apscheduler>=3.10.4
