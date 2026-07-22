@@ -32,12 +32,14 @@ SHIFT_COLUMNS = {
     "close_time": "VARCHAR DEFAULT ''",
     "close_cash": "VARCHAR DEFAULT ''",
     "close_card": "VARCHAR DEFAULT ''",
+    "close_deposits": "VARCHAR DEFAULT ''",
     "close_revenue": "VARCHAR DEFAULT ''",
     "close_guests": "VARCHAR DEFAULT ''",
     "close_dangerous": "VARCHAR DEFAULT ''",
     "close_comps": "VARCHAR DEFAULT ''",
     "close_marketing": "VARCHAR DEFAULT ''",
     "close_expenses": "VARCHAR DEFAULT ''",
+    "close_meduza": "VARCHAR DEFAULT ''",
     "close_report": "VARCHAR DEFAULT ''",
 }
 

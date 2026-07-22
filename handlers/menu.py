@@ -463,12 +463,14 @@ async def handle_get_backup(callback: types.CallbackQuery, callback_data: MenuCa
                 "Время закрытия": s.close_time or "",
                 "Наличные": s.close_cash or "",
                 "Безнал": s.close_card or "",
+                "Депозиты": getattr(s, "close_deposits", "") or "",
                 "Общая выручка": s.close_revenue or "",
                 "Количество гостей": s.close_guests or "",
                 "Опасные операции": s.close_dangerous or "",
                 "Блюда за счет заведения": s.close_comps or "",
                 "Расходы на маркетинг": s.close_marketing or "",
                 "Расходы на смену": s.close_expenses or "",
+                "Медуза": getattr(s, "close_meduza", "") or "",
                 "Доклад о закрытии": s.close_report or "",
             }
             data.append(row)

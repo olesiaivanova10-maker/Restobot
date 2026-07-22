@@ -6,7 +6,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
 from core.logger import logger
-from core.config import AI_PROMPTS, STEPS_OPEN, STEPS_CLOSE, LIST_MAPPING
+from core.config import AI_PROMPTS, STEPS_OPEN, STEPS_CLOSE, KISA_STEPS_CLOSE, LIST_MAPPING
 from states.report import ReportSteps
 from services.ai import encode_image_to_base64, get_parsed_report, optimize_image_for_ai
 from services.google_sheets import update_google_sheet
@@ -28,6 +28,14 @@ def is_missing_report_value(value) -> bool:
 
     text = str(value).strip()
     return text == "" or text.lower() == "пропущено"
+
+def get_close_steps(est_key: str) -> list[str]:
+    return KISA_STEPS_CLOSE if est_key == "kisa" else STEPS_CLOSE
+
+def get_ai_prompt_key(report_type: str, est_key: str) -> str:
+    if report_type == "Закрытие" and est_key == "kisa":
+        return "Закрытие:kisa"
+    return report_type
 
 async def ask_missing_items(user_id: int, missing_queue: list[str], message: types.Message, state: FSMContext):
     items_text = "\n".join([f"— {item}" for item in missing_queue])
@@ -116,7 +124,8 @@ async def process_report_payload(messages_packet: list, state: FSMContext):
             image_paths.append(tmp_path)
 
         report_type = user_data["chosen_type"]
-        expected_steps = STEPS_OPEN if report_type == "Открытие" else STEPS_CLOSE
+        est_key = user_data.get("est_key")
+        expected_steps = STEPS_OPEN if report_type == "Открытие" else get_close_steps(est_key)
         collected_data = user_data.get("collected_data", {})
 
         ai_text = f"История сообщений отчета:\n{accumulated_text.strip()}"
@@ -139,7 +148,8 @@ async def process_report_payload(messages_packet: list, state: FSMContext):
                 f"text_chars={len(ai_text)}"
             )
 
-        parsed_blocks = await get_parsed_report(report_type, AI_PROMPTS[report_type], ai_contents)
+        prompt_key = get_ai_prompt_key(report_type, est_key)
+        parsed_blocks = await get_parsed_report(report_type, AI_PROMPTS[prompt_key], ai_contents)
 
         for step in expected_steps:
             val = None
@@ -163,12 +173,14 @@ async def process_report_payload(messages_packet: list, state: FSMContext):
                 "Стоп лист": ["стоп лист", "stop list", "стоплист", "стоп листа"],
                 "Наличные": ["наличные", "cash"],
                 "Безнал": ["безнал", "безналичный"],
+                "Депозиты": ["депозиты", "депозит"],
                 "Общая выручка": ["выручка", "total revenue"],
                 "Количество гостей": ["гости", "количество гостей"],
                 "Опасные операции": ["опасные операции", "dangerous operations"],
                 "Доклад об открытии смены": ["открытие смены", "отчет об открытии"],
                 "Доклад об закрытии смены": ["закрытие смены", "отчет о закрытии"],
-                "Блюда з": ["блюда", "dishes"]
+                "Блюда з": ["блюда", "dishes"],
+                "Медуза": ["медуза"]
             }
             
             # Iterate over a copy to allow removal

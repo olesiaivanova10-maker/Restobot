@@ -9,7 +9,8 @@ from sqlalchemy import select
 from core.logger import logger
 from core.config import (
     GROUP_REST_MAP, LIST_MAPPING, 
-    OPEN_FIELD_MAP, CLOSE_FIELD_MAP, DEV_GROUP_ID
+    OPEN_FIELD_MAP, CLOSE_FIELD_MAP, DEV_GROUP_ID,
+    STEPS_CLOSE, KISA_STEPS_CLOSE
 )
 from models.shift import Shift
 from services.db import get_shift_by_date, get_session
@@ -32,14 +33,20 @@ TYPE_CODE_REV = {v: k for k, v in TYPE_CODE.items()}
 
 # field_key: numeric index -> field name
 OPEN_FIELDS = list(OPEN_FIELD_MAP.keys())   # ["Стоп лист", "Приход продуктов", ...]
-CLOSE_FIELDS = list(CLOSE_FIELD_MAP.keys()) # ["Наличные", "Безнал", ...]
+CLOSE_FIELDS = STEPS_CLOSE
+KISA_CLOSE_FIELDS = KISA_STEPS_CLOSE
 
-def field_idx_to_name(type_code: str, idx: int) -> str:
-    fields = OPEN_FIELDS if type_code == "o" else CLOSE_FIELDS
+def get_edit_fields(type_code: str, est_key: str = "") -> list[str]:
+    if type_code == "o":
+        return OPEN_FIELDS
+    return KISA_CLOSE_FIELDS if est_key == "kisa" else CLOSE_FIELDS
+
+def field_idx_to_name(type_code: str, idx: int, est_key: str = "") -> str:
+    fields = get_edit_fields(type_code, est_key)
     return fields[idx] if 0 <= idx < len(fields) else None
 
-def field_name_to_idx(type_code: str, name: str) -> int:
-    fields = OPEN_FIELDS if type_code == "o" else CLOSE_FIELDS
+def field_name_to_idx(type_code: str, name: str, est_key: str = "") -> int:
+    fields = get_edit_fields(type_code, est_key)
     return fields.index(name) if name in fields else -1
 
 def vvo_now() -> datetime:
@@ -196,7 +203,7 @@ async def select_type(callback: types.CallbackQuery, callback_data: EditMenuCall
     report_type = TYPE_CODE.get(type_code, "Открытие")
     
     field_map = OPEN_FIELD_MAP if type_code == "o" else CLOSE_FIELD_MAP
-    fields = OPEN_FIELDS if type_code == "o" else CLOSE_FIELDS
+    fields = get_edit_fields(type_code, est_key)
     
     shift = await get_shift_by_date(date_str, est_key)
     
@@ -246,7 +253,7 @@ async def select_field(callback: types.CallbackQuery, callback_data: EditMenuCal
     date_str = callback_data.d
     type_code = callback_data.t
     report_type = TYPE_CODE.get(type_code, "Открытие")
-    field_name = field_idx_to_name(type_code, callback_data.f)
+    field_name = field_idx_to_name(type_code, callback_data.f, est_key)
     
     if not field_name:
         return await callback.answer("❌ Недопустимое поле.", show_alert=True)

@@ -21,10 +21,12 @@ class Shift(Base):
     close_time = Column(String, default="")        # "02:15"
     close_cash = Column(String, default="")        # Наличные
     close_card = Column(String, default="")        # Безнал
+    close_deposits = Column(String, default="")    # Депозиты
     close_revenue = Column(String, default="")     # Общая выручка
     close_guests = Column(String, default="")      # Количество гостей
     close_dangerous = Column(String, default="")   # Опасные операции
     close_comps = Column(String, default="")       # Блюда за счет заведения
     close_marketing = Column(String, default="")   # Расходы на маркетинг
     close_expenses = Column(String, default="")    # Расходы на смену
+    close_meduza = Column(String, default="")      # Медуза
     close_report = Column(String, default="")      # Доклад о закрытии смены
