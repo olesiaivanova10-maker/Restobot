@@ -67,6 +67,7 @@ async def handle_initial_packet(message: types.Message, state: FSMContext):
     logger.info(f"==> RECEIVED PACKET from user {user_id}: type={message.content_type}, mg_id={message.media_group_id}")
     user_data = await state.get_data()
     menu_message_id = user_data.get("menu_message_id")
+    command_message_id = user_data.get("command_message_id")
     
     if menu_message_id:
         try:
@@ -74,6 +75,16 @@ async def handle_initial_packet(message: types.Message, state: FSMContext):
             await state.update_data(menu_message_id=None)
         except Exception:
             pass
+
+    if command_message_id:
+        try:
+            await message.bot.delete_message(
+                chat_id=message.chat.id,
+                message_id=command_message_id,
+            )
+        except Exception:
+            pass
+        await state.update_data(command_message_id=None)
 
     if user_id not in user_payload_storage:
         user_payload_storage[user_id] = {"messages": [], "task": None}

@@ -35,11 +35,12 @@ class MenuCallback(CallbackData, prefix="menu"):
     is_test: int = 0
 
 @menu_router.message(Command("menu"))
-async def show_main_menu(message: types.Message):
+async def show_main_menu(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     chat_id = message.chat.id
     
     if chat_id in GROUP_REST_MAP:
+        await state.update_data(command_message_id=message.message_id)
         est_key = GROUP_REST_MAP[chat_id]
         sheet_name = LIST_MAPPING[est_key]
         
@@ -427,7 +428,8 @@ async def handle_establishment_choice(callback: types.CallbackQuery, callback_da
         accumulated_text="",
         accumulated_photo_ids=[],
         menu_message_id=menu_msg.message_id,
-        service_message_ids=[]
+        service_message_ids=[],
+        command_message_id=(await state.get_data()).get("command_message_id")
     )
     await state.set_state(ReportSteps.waiting_for_combined_report)
 
