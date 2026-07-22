@@ -11,6 +11,7 @@ from states.report import ReportSteps
 from services.ai import encode_image_to_base64, get_parsed_report, optimize_image_for_ai
 from services.google_sheets import update_google_sheet
 from services.db import mark_shift_open, mark_shift_closed
+from services.error_reporting import notify_admins_about_error, show_generic_report_error
 
 reports_router = Router()
 
@@ -45,7 +46,20 @@ async def ask_missing_items(user_id: int, missing_queue: list[str], message: typ
         "Пожалуйста, напишите недостающую информацию в <b>одном сообщении</b> (или прикрепите фото)."
     )
     await state.set_state(ReportSteps.waiting_for_missing_item)
-    await message.reply(text, parse_mode="HTML")
+    prompt_message = await message.reply(text, parse_mode="HTML")
+    await state.update_data(service_message_ids=[prompt_message.message_id])
+
+
+async def delete_service_messages(message: types.Message, state: FSMContext) -> None:
+    user_data = await state.get_data()
+    message_ids = user_data.get("service_message_ids", [])
+    for message_id in message_ids:
+        try:
+            await message.bot.delete_message(chat_id=message.chat.id, message_id=message_id)
+        except Exception:
+            pass
+    if message_ids:
+        await state.update_data(service_message_ids=[])
 
 @reports_router.message(ReportSteps.waiting_for_combined_report, F.text | F.photo | F.document)
 async def handle_initial_packet(message: types.Message, state: FSMContext):
@@ -56,11 +70,7 @@ async def handle_initial_packet(message: types.Message, state: FSMContext):
     
     if menu_message_id:
         try:
-            await message.bot.edit_message_reply_markup(
-                chat_id=message.chat.id,
-                message_id=menu_message_id,
-                reply_markup=None
-            )
+            await message.bot.delete_message(chat_id=message.chat.id, message_id=menu_message_id)
             await state.update_data(menu_message_id=None)
         except Exception:
             pass
@@ -211,6 +221,10 @@ async def process_report_payload(messages_packet: list, state: FSMContext):
             if missing_queue:
                 # После попытки заполнения, если всё ещё есть пропуски – оставляем их для обычного запроса
                 await state.update_data(collected_data=collected_data, missing_queue=missing_queue)
+                try:
+                    await status_msg.delete()
+                except Exception:
+                    pass
                 await ask_missing_items(user_id, missing_queue, message, state)
                 return
 
@@ -225,9 +239,15 @@ async def process_report_payload(messages_packet: list, state: FSMContext):
         await status_msg.edit_text(f"✅ <b>Все данные собраны. Итоговый отчет:</b>\n\n{summary}\n\nЗаписываем в таблицу?", parse_mode="HTML", reply_markup=kb)
 
     except Exception as e:
-        logger.error(f"Ошибка парсинга пакета: {e}")
+        logger.exception(f"Ошибка парсинга пакета: {e}")
         await state.update_data(accumulated_photo_ids=[])
-        await status_msg.edit_text(f"❌ Произошла ошибка: {e}")
+        await notify_admins_about_error(
+            message.bot,
+            e,
+            message,
+            context="Обработка отчёта сотрудника",
+        )
+        await show_generic_report_error(status_msg)
     finally:
         for p in image_paths:
             if os.path.exists(p): os.remove(p)
@@ -236,6 +256,7 @@ async def process_report_payload(messages_packet: list, state: FSMContext):
 async def handle_missing_item_input(message: types.Message, state: FSMContext):
     user_id = message.from_user.id
     logger.info(f"==> RECEIVED MISSING ITEM from user {user_id}: type={message.content_type}, mg_id={message.media_group_id}")
+    await delete_service_messages(message, state)
     
     if user_id not in user_payload_storage:
         user_payload_storage[user_id] = {"messages": [], "task": None}
@@ -269,27 +290,40 @@ async def handle_confirm_report(callback: types.CallbackQuery, state: FSMContext
     except Exception:
         pass
 
-    user_data = await state.get_data()
-    sheet_name = user_data["chosen_sheet"]
-    is_test = user_data.get("is_test", False)
-    # Get the est_key without the DEV prefix if it exists
-    base_sheet_name = sheet_name.replace("DEV(", "").replace(")", "") if is_test else sheet_name
-    est_key = user_data.get("est_key") or next((k for k, v in LIST_MAPPING.items() if v == base_sheet_name), base_sheet_name)
-    report_type = user_data["chosen_type"]
-    collected_data = user_data["collected_data"]
+    try:
+        user_data = await state.get_data()
+        sheet_name = user_data["chosen_sheet"]
+        is_test = user_data.get("is_test", False)
+        # Get the est_key without the DEV prefix if it exists
+        base_sheet_name = sheet_name.replace("DEV(", "").replace(")", "") if is_test else sheet_name
+        est_key = user_data.get("est_key") or next((k for k, v in LIST_MAPPING.items() if v == base_sheet_name), base_sheet_name)
+        report_type = user_data["chosen_type"]
+        collected_data = user_data["collected_data"]
+        target_date = user_data.get("target_date")
 
-    await callback.message.edit_text(f"✅ <b>Отчет по {sheet_name} успешно принят! </b>", parse_mode="HTML")
-    
-    if report_type == "Открытие":
-        target_date = user_data.get("target_date")
-        await mark_shift_open(est_key, collected_data, is_test=is_test, target_date=target_date)
-    else:
-        target_date = user_data.get("target_date")
-        await mark_shift_closed(est_key, collected_data, is_test=is_test)
-        
-    asyncio.create_task(asyncio.to_thread(update_google_sheet, sheet_name, report_type, collected_data, target_date))
-    
-    await state.clear()
+        if report_type == "Открытие":
+            await mark_shift_open(est_key, collected_data, is_test=is_test, target_date=target_date)
+        else:
+            await mark_shift_closed(est_key, collected_data, is_test=is_test)
+
+        await asyncio.to_thread(
+            update_google_sheet,
+            sheet_name,
+            report_type,
+            collected_data,
+            target_date,
+        )
+        await callback.message.edit_text("✅ Отчёт успешно принят!", reply_markup=None)
+        await state.clear()
+    except Exception as e:
+        logger.exception(f"Ошибка сохранения отчёта: {e}")
+        await notify_admins_about_error(
+            callback.bot,
+            e,
+            callback.message,
+            context="Сохранение отчёта в БД или Google Sheets",
+        )
+        await show_generic_report_error(callback.message)
 
 @reports_router.callback_query(ReportSteps.waiting_for_confirmation, F.data == "edit_report")
 async def handle_edit_report(callback: types.CallbackQuery, state: FSMContext):
@@ -300,4 +334,7 @@ async def handle_edit_report(callback: types.CallbackQuery, state: FSMContext):
 
     await callback.message.edit_text("✏️ Режим редактирования.\nНапишите текстом, что нужно исправить (или прикрепите новые фото).\nБот обновит отчет с учетом новых данных.")
     await state.set_state(ReportSteps.waiting_for_missing_item)
-    await state.update_data(current_item="Правки отчета")
+    await state.update_data(
+        current_item="Правки отчета",
+        service_message_ids=[callback.message.message_id],
+    )

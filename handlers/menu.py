@@ -426,7 +426,8 @@ async def handle_establishment_choice(callback: types.CallbackQuery, callback_da
         missing_queue=[],
         accumulated_text="",
         accumulated_photo_ids=[],
-        menu_message_id=menu_msg.message_id
+        menu_message_id=menu_msg.message_id,
+        service_message_ids=[]
     )
     await state.set_state(ReportSteps.waiting_for_combined_report)
 
