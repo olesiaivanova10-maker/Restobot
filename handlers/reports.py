@@ -2,6 +2,7 @@ import os
 import asyncio
 import re
 from aiogram import Router, types, F
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 
@@ -302,6 +303,19 @@ async def handle_confirm_report(callback: types.CallbackQuery, state: FSMContext
         pass
 
     try:
+        # Сразу убираем кнопки. Параллельный обработчик повторного нажатия
+        # получит "message is not modified" и завершится до повторной записи.
+        try:
+            await callback.message.edit_text("⏳ Сохраняю отчёт...", reply_markup=None)
+        except TelegramBadRequest as edit_error:
+            if "message is not modified" in str(edit_error):
+                logger.info(
+                    "Повторное подтверждение отчёта проигнорировано: "
+                    f"chat={callback.message.chat.id}, message={callback.message.message_id}"
+                )
+                return
+            raise
+
         user_data = await state.get_data()
         sheet_name = user_data["chosen_sheet"]
         is_test = user_data.get("is_test", False)
