@@ -74,6 +74,7 @@ function generateNextDayBlock() {
   targetSheetNames.forEach(function(sheetName) {
     var sheet = ss.getSheetByName(sheetName);
     if (!sheet) return; 
+    var currentBlockHeight = (sheetName === "Киса бар") ? 17 : blockHeight;
     
     var maxColumns = sheet.getMaxColumns();
     var lastColumnWithData = 0; 
@@ -117,7 +118,7 @@ function generateNextDayBlock() {
         sheet.insertColumnsAfter(currentMaxCols, neededCols - currentMaxCols);
       }
       
-      var targetRange = sheet.getRange(startRow, targetColumn, blockHeight, blockWidth);
+      var targetRange = sheet.getRange(startRow, targetColumn, currentBlockHeight, blockWidth);
       
       // Правильное снятие объединений
       var mergedRanges = targetRange.getMergedRanges();
@@ -131,7 +132,7 @@ function generateNextDayBlock() {
         sheet.setColumnWidth(targetColumn + w, defaultColWidths[w]);
       }
       
-      for (var h = 0; h < blockHeight; h++) {
+      for (var h = 0; h < currentBlockHeight; h++) {
         sheet.setRowHeight(startRow + h, (h === 0 || h === 5) ? firstRowHeight : otherRowsHeight);
       }
       
@@ -152,6 +153,12 @@ function generateNextDayBlock() {
         ["Расходы на смену", "", ""],
         ["Доклад о закрытии смены", "", ""]
       ];
+      if (sheetName === "Киса бар") {
+        blockValues.splice(8, 0, ["Депозиты", "", ""]);
+        blockValues.splice(15, 1);
+        blockValues.splice(14, 0, ["Доклад о закрытии смены", "", ""]);
+        blockValues.push(["Медуза", "", ""]);
+      }
       targetRange.setValues(blockValues);
       
       targetRange.setFontFamily("Montserrat").setFontSize(10).setFontWeight("normal").setWrap(true);
@@ -166,16 +173,16 @@ function generateNextDayBlock() {
       date2.setHorizontalAlignment("center").setVerticalAlignment("middle").setFontSize(14).setNumberFormat('dd.MM').setFontWeight("bold");
       
       sheet.getRange(startRow + 1, targetColumn, 4, 1).setFontSize(13);
-      sheet.getRange(startRow + 6, targetColumn, 9, 1).setFontSize(13);
+      sheet.getRange(startRow + 6, targetColumn, currentBlockHeight - 6, 1).setFontSize(13);
       
       try {
         for (var r = 2; r <= 5; r++) sheet.getRange(startRow + r - 1, targetColumn + 1, 1, 2).mergeAcross().setFontSize(13);
-        for (var r = 7; r <= 15; r++) sheet.getRange(startRow + r - 1, targetColumn + 1, 1, 2).mergeAcross().setFontSize(13);
+        for (var r = 7; r <= currentBlockHeight; r++) sheet.getRange(startRow + r - 1, targetColumn + 1, 1, 2).mergeAcross().setFontSize(13);
       } catch (e) {}
       
       targetRange.setBorder(true, true, true, true, false, false, "black", SpreadsheetApp.BorderStyle.MEDIUM);
       sheet.getRange(startRow, targetColumn, 5, 1).setBorder(true, true, true, true, false, false, "black", SpreadsheetApp.BorderStyle.MEDIUM);
-      sheet.getRange(startRow + 5, targetColumn, 10, 1).setBorder(true, true, true, true, false, false, "black", SpreadsheetApp.BorderStyle.MEDIUM);
+      sheet.getRange(startRow + 5, targetColumn, currentBlockHeight - 5, 1).setBorder(true, true, true, true, false, false, "black", SpreadsheetApp.BorderStyle.MEDIUM);
       
       // Границы для ячеек B1:C1 и B6:C6
       sheet.getRange(startRow, targetColumn + 1, 1, 2).setBorder(true, true, true, true, true, true, "black", SpreadsheetApp.BorderStyle.MEDIUM);
@@ -187,7 +194,7 @@ function generateNextDayBlock() {
     
     // АВТОУДАЛЕНИЕ ПУСТЫХ СТРОК И СТОЛБЦОВ
     var totalNeededCols = (lastColumnWithData === 0) ? blockWidth : lastColumnWithData + blockWidth - 1;
-    trimSheet(sheet, startRow + blockHeight - 1, totalNeededCols);
+    trimSheet(sheet, startRow + currentBlockHeight - 1, totalNeededCols);
   });
 }
 
@@ -366,7 +373,8 @@ function generateReportBlock() {
       }
       
       if (sourceColIndex !== -1) {
-        var srcData = sourceSheet.getRange(startRow, sourceColIndex, 15, blockWidth).getDisplayValues();
+        var sourceBlockHeight = (sName === "Киса бар") ? 17 : blockHeight;
+        var srcData = sourceSheet.getRange(startRow, sourceColIndex, sourceBlockHeight, blockWidth).getDisplayValues();
         
         // Данные Открытия, Стоп-листа, Закрытия и финансов — всё из ТЕКУЩЕГО блока
         reportBlockValues[1][1 + index] = srcData[0][1]; // Открытие (Время)
@@ -378,7 +386,8 @@ function generateReportBlock() {
         reportBlockValues[3][1 + index] = srcData[5][1]; // Закрытие (Время)
         reportBlockValues[10][1 + index] = srcData[10][1]; // Опасные
         reportBlockValues[9][1 + index] = srcData[11][1]; // За счет
-        reportBlockValues[8][1 + index] = srcData[13][1]; // Расходы на смену
+        var expensesRowIndex = (sName === "Киса бар") ? 15 : 13;
+        reportBlockValues[8][1 + index] = srcData[expensesRowIndex][1]; // Расходы на смену
       }
     });
     

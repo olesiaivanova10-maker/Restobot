@@ -4,7 +4,14 @@ import gspread
 from tenacity import retry, stop_after_attempt, wait_exponential
 
 from core.logger import logger
-from core.config import GOOGLE_SHEET_ID, STEPS_OPEN, STEPS_CLOSE, LIST_MAPPING, now_vlad
+from core.config import (
+    GOOGLE_SHEET_ID,
+    KISA_STEPS_CLOSE,
+    LIST_MAPPING,
+    STEPS_CLOSE,
+    STEPS_OPEN,
+    now_vlad,
+)
 
 # --- Кэш для клиента Google Sheets ---
 _cached_sheets_client = None
@@ -195,14 +202,15 @@ def update_google_sheet(sheet_name: str, report_type: str, collected_data: dict,
         worksheet.update(values=values, range_name=range_str)
             
     elif report_type == "Закрытие":
+        close_steps = KISA_STEPS_CLOSE if sheet_name == LIST_MAPPING["kisa"] else STEPS_CLOSE
         values = [[current_time]]
-        for idx, h in enumerate(STEPS_CLOSE):
+        for idx, h in enumerate(close_steps):
             r = idx + 7
             default_fallback = "Информация отсутствует" if h == "Количество гостей" else "Нет"
             final_val = clean_text_value(collected_data.get(h, default_fallback), r)
             values.append([final_val])
             
-        range_str = f"{col_b_let}6:{col_b_let}{len(STEPS_CLOSE) + 6}"
+        range_str = f"{col_b_let}6:{col_b_let}{len(close_steps) + 6}"
         worksheet.update(values=values, range_name=range_str)
 
     # После записи в лист ресторана — синхронизируем в Доклад
@@ -240,17 +248,18 @@ def sync_to_doklad(spreadsheet, sheet_name: str, report_type: str, target_date: 
         return
     rest_data_col = rest_info["start_col"] + 1  # колонка с данными
 
-    # Читаем весь столбец данных ресторана (строки 1-15)
+    # У Кисы две дополнительные строки закрытия, остальные листы остаются 15-строчными.
+    block_height = 17 if sheet_name == LIST_MAPPING["kisa"] else 15
     rest_col_letter = col_to_letter(rest_data_col)
     try:
-        rest_values = rest_ws.get(f"{rest_col_letter}1:{rest_col_letter}15")
+        rest_values = rest_ws.get(f"{rest_col_letter}1:{rest_col_letter}{block_height}")
     except Exception:
         rest_values = []
-    # Преобразуем в плоский список (дополняем пустыми если короче 15)
+    # Преобразуем в плоский список и дополняем пустыми значениями до высоты блока.
     rest_flat = []
     for row in rest_values:
         rest_flat.append(row[0] if row else "")
-    while len(rest_flat) < 15:
+    while len(rest_flat) < block_height:
         rest_flat.append("")
 
     # Находим или создаём блок даты в Докладе
@@ -290,6 +299,8 @@ def sync_to_doklad(spreadsheet, sheet_name: str, report_type: str, target_date: 
     # Копируем данные по маппингу
     updates = []
     for rest_row, doklad_row in DOKLAD_ROW_MAP:
+        if sheet_name == LIST_MAPPING["kisa"] and rest_row == 14:
+            rest_row = 16
         value = rest_flat[rest_row - 1] if rest_row - 1 < len(rest_flat) else ""
         updates.append({
             "range": f"{doklad_col_letter}{doklad_row}",
