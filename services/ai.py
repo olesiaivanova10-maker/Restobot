@@ -33,7 +33,6 @@ async def get_parsed_report(report_type: str, system_prompt: str, user_contents:
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_contents}
         ],
-        temperature=0.2,
         response_format={"type": "json_object"}
     )
     
@@ -57,7 +56,6 @@ async def get_parsed_followup(system_prompt: str, user_contents: list) -> Tuple[
             {"role": "system", "content": json_prompt},
             {"role": "user", "content": user_contents}
         ],
-        temperature=0.1,
         response_format={"type": "json_object"}
     )
     content = response.choices[0].message.content
