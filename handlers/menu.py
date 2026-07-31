@@ -33,6 +33,7 @@ class MenuCallback(CallbackData, prefix="menu"):
     user_id: int
     est_key: str = ""
     is_test: int = 0
+    prompt_only: int = 0
 
 @menu_router.message(Command("menu"))
 async def show_main_menu(message: types.Message, state: FSMContext):
@@ -76,11 +77,19 @@ async def show_main_menu(message: types.Message, state: FSMContext):
     builder.add(types.InlineKeyboardButton(text="🌌 Закрыть смену", callback_data=MenuCallback(action="close", user_id=user_id).pack()))
     
     if chat_id == DEV_GROUP_ID:
+        builder.add(types.InlineKeyboardButton(
+            text="🧪 Тест промпта открытия",
+            callback_data=MenuCallback(action="prompt_open", user_id=user_id).pack()
+        ))
+        builder.add(types.InlineKeyboardButton(
+            text="🧪 Тест промпта закрытия",
+            callback_data=MenuCallback(action="prompt_close", user_id=user_id).pack()
+        ))
         builder.add(types.InlineKeyboardButton(text="✏️ Редактировать отчет", callback_data=EditMenuCallback(a="selest", u=user_id, e="").pack()))
         builder.add(types.InlineKeyboardButton(text="🔗 Полезные ссылки", callback_data=MenuCallback(action="links", user_id=user_id).pack()))
         builder.add(types.InlineKeyboardButton(text="🛠️ [DEV] Сбросить тест-данные", callback_data=MenuCallback(action="dev_clear", user_id=user_id).pack()))
         builder.add(types.InlineKeyboardButton(text="❌ Закрыть", callback_data=MenuCallback(action="close_menu", user_id=user_id).pack()))
-        builder.adjust(2, 1, 1, 1)
+        builder.adjust(2, 1, 1, 1, 1, 1)
     else:
         if user_id in GLAVADMIN_ID and message.chat.type == "private":
             builder.add(types.InlineKeyboardButton(text="📦 Скачать Excel Бэкап", callback_data=MenuCallback(action="get_backup", user_id=user_id).pack()))
@@ -178,10 +187,18 @@ async def handle_back_to_main(callback: types.CallbackQuery, callback_data: Menu
     builder.add(types.InlineKeyboardButton(text="🌌 Закрыть смену", callback_data=MenuCallback(action="close", user_id=user_id).pack()))
     
     if chat_id == DEV_GROUP_ID:
+        builder.add(types.InlineKeyboardButton(
+            text="🧪 Тест промпта открытия",
+            callback_data=MenuCallback(action="prompt_open", user_id=user_id).pack()
+        ))
+        builder.add(types.InlineKeyboardButton(
+            text="🧪 Тест промпта закрытия",
+            callback_data=MenuCallback(action="prompt_close", user_id=user_id).pack()
+        ))
         builder.add(types.InlineKeyboardButton(text="🔗 Полезные ссылки", callback_data=MenuCallback(action="links", user_id=user_id).pack()))
         builder.add(types.InlineKeyboardButton(text="🛠️ [DEV] Сбросить тест-данные", callback_data=MenuCallback(action="dev_clear", user_id=user_id).pack()))
         builder.add(types.InlineKeyboardButton(text="❌ Закрыть", callback_data=MenuCallback(action="close_menu", user_id=user_id).pack()))
-        builder.adjust(2, 1, 2)
+        builder.adjust(2, 1, 1, 1, 1, 1)
     else:
         builder.add(types.InlineKeyboardButton(text="❌ Закрыть", callback_data=MenuCallback(action="close_menu", user_id=user_id).pack()))
         builder.adjust(2, 1)
@@ -292,6 +309,24 @@ async def handle_db_choice(callback: types.CallbackQuery, callback_data: MenuCal
     
     await process_action_choice(callback, actual_action, callback_data.user_id, is_test=is_test)
 
+
+@menu_router.callback_query(MenuCallback.filter(F.action.in_(["prompt_open", "prompt_close"])))
+async def handle_prompt_test(callback: types.CallbackQuery, callback_data: MenuCallback, state: FSMContext):
+    if callback.from_user.id != callback_data.user_id:
+        return await callback.answer("Не тыкай!", show_alert=True)
+    if callback.message.chat.id != DEV_GROUP_ID:
+        return await callback.answer("Тест промпта доступен только в DEV-группе.", show_alert=True)
+
+    action = "est_open" if callback_data.action == "prompt_open" else "est_close"
+    prompt_callback_data = MenuCallback(
+        action=action,
+        user_id=callback_data.user_id,
+        est_key="kisa",
+        prompt_only=1,
+    )
+    await handle_establishment_choice(callback, prompt_callback_data, state)
+
+
 async def process_action_choice(callback: types.CallbackQuery, action: str, user_id: int, is_test: int):
     report_type_display = "открытия" if action == "open" else "закрытия"
     await callback.message.edit_text(f"⏳ Проверяю доступные заведения для {report_type_display}...")
@@ -362,8 +397,12 @@ async def handle_establishment_choice(callback: types.CallbackQuery, callback_da
     
     est_key = callback_data.est_key
     is_test = callback_data.is_test
+    prompt_only = bool(callback_data.prompt_only)
     report_type = "Открытие" if action == "open" else "Закрытие"
-    sheet_name = f"DEV({LIST_MAPPING[est_key]})" if is_test else LIST_MAPPING[est_key]
+    if prompt_only:
+        sheet_name = f"ТЕСТ ПРОМПТА ({LIST_MAPPING[est_key]})"
+    else:
+        sheet_name = f"DEV({LIST_MAPPING[est_key]})" if is_test else LIST_MAPPING[est_key]
     
     builder = InlineKeyboardBuilder()
     chat_id = callback.message.chat.id
@@ -374,9 +413,10 @@ async def handle_establishment_choice(callback: types.CallbackQuery, callback_da
         ))
     else:
         if chat_id == DEV_GROUP_ID:
+            back_action = "main" if prompt_only else f"test_{action}" if is_test else f"prod_{action}"
             builder.add(types.InlineKeyboardButton(
-                text="⬅️ Назад", 
-                callback_data=MenuCallback(action=f"test_{action}" if is_test else f"prod_{action}", user_id=callback_data.user_id).pack()
+                text="⬅️ Назад",
+                callback_data=MenuCallback(action=back_action, user_id=callback_data.user_id).pack()
             ))
         else:
             builder.add(types.InlineKeyboardButton(
@@ -421,6 +461,7 @@ async def handle_establishment_choice(callback: types.CallbackQuery, callback_da
         chosen_sheet=sheet_name, 
         est_key=est_key,
         is_test=bool(is_test),
+        prompt_only=prompt_only,
         chosen_type=report_type, 
         target_date=target_date,
         collected_data={}, 

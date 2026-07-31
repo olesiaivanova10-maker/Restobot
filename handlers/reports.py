@@ -317,6 +317,24 @@ async def handle_confirm_report(callback: types.CallbackQuery, state: FSMContext
             raise
 
         user_data = await state.get_data()
+        prompt_only = user_data.get("prompt_only", False)
+        if prompt_only:
+            collected_data = user_data["collected_data"]
+            summary = "\n".join(
+                f"<b>{key}</b>: {value}"
+                for key, value in collected_data.items()
+            )
+            await callback.message.edit_text(
+                "✅ <b>Тест промпта завершён.</b>\n"
+                "Данные сохранены только в этом сообщении Telegram "
+                "и не отправлены в БД или Google Sheets.\n\n"
+                f"{summary}",
+                parse_mode="HTML",
+                reply_markup=None,
+            )
+            await state.clear()
+            return
+
         sheet_name = user_data["chosen_sheet"]
         is_test = user_data.get("is_test", False)
         # Get the est_key without the DEV prefix if it exists
