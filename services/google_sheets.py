@@ -181,18 +181,31 @@ def ensure_report_block(worksheet, sheet_name: str, target_date: str, report_typ
         candidate = datetime(year, month, day).date()
         if candidate > (now + timedelta(days=1)).date():
             year -= 1
-        date_formula = f"=DATE({year},{month},{day})"
+        target_calendar_date = datetime(year, month, day).date()
+        google_epoch = datetime(1899, 12, 30).date()
+        date_serial = (target_calendar_date - google_epoch).days
 
         block_values = [[label, "", ""] for label in labels]
-        block_values[0][2] = date_formula
-        block_values[5][2] = date_formula
 
         start_letter = col_to_letter(start_col)
         end_letter = col_to_letter(start_col + 2)
         worksheet.update(
             values=block_values,
             range_name=f"{start_letter}1:{end_letter}{block_height}",
-            value_input_option="USER_ENTERED",
+        )
+        worksheet.update(
+            values=[[date_serial]],
+            range_name=f"{end_letter}1",
+            value_input_option="RAW",
+        )
+        worksheet.update(
+            values=[[date_serial]],
+            range_name=f"{end_letter}6",
+            value_input_option="RAW",
+        )
+        worksheet.format(
+            f"{end_letter}1:{end_letter}6",
+            {"numberFormat": {"type": "DATE", "pattern": "dd.MM"}},
         )
         logger.info(
             f"Создан отсутствующий блок {target_date} в листе {sheet_name}: "
