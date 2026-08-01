@@ -1,6 +1,6 @@
 import time
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 import gspread
 from tenacity import retry, stop_after_attempt, wait_exponential
 
@@ -175,15 +175,24 @@ def ensure_report_block(worksheet, sheet_name: str, target_date: str, report_typ
             except Exception as exc:
                 logger.warning(f"Не удалось скопировать формат нового блока {sheet_name}: {exc}")
 
+        day, month = (int(part) for part in target_date.split(".", 1))
+        now = now_vlad()
+        year = now.year
+        candidate = datetime(year, month, day).date()
+        if candidate > (now + timedelta(days=1)).date():
+            year -= 1
+        date_formula = f"=DATE({year},{month},{day})"
+
         block_values = [[label, "", ""] for label in labels]
-        block_values[0][2] = target_date
-        block_values[5][2] = target_date
+        block_values[0][2] = date_formula
+        block_values[5][2] = date_formula
 
         start_letter = col_to_letter(start_col)
         end_letter = col_to_letter(start_col + 2)
         worksheet.update(
             values=block_values,
             range_name=f"{start_letter}1:{end_letter}{block_height}",
+            value_input_option="USER_ENTERED",
         )
         logger.info(
             f"Создан отсутствующий блок {target_date} в листе {sheet_name}: "
@@ -240,8 +249,6 @@ def get_batch_shift_status(sheet_names: list[str], target_date_open: str, target
     except Exception as e:
         logger.error(f"Error in get_batch_shift_status: {e}")
         return {name: {"is_opened": False, "is_closed": False} for name in sheet_names}
-
-from datetime import timedelta
 
 @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
 def update_google_sheet(sheet_name: str, report_type: str, collected_data: dict, target_date: str = None):

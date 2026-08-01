@@ -84,6 +84,7 @@ function generateNextDayBlock() {
     
     var maxColumns = sheet.getMaxColumns();
     var lastColumnWithData = 0; 
+    var latestDateInTable = null;
     
     // ПАКЕТНОЕ ЧТЕНИЕ
     if (maxColumns >= 3) {
@@ -91,14 +92,18 @@ function generateNextDayBlock() {
       for (var col = 0; col < maxColumns; col += blockWidth) {
         if (col + 2 < headerRow.length && headerRow[col + 2] instanceof Date) {
           lastColumnWithData = col + 1;
+          var blockDate = new Date(headerRow[col + 2]);
+          blockDate.setHours(0, 0, 0, 0);
+          if (!latestDateInTable || blockDate > latestDateInTable) {
+            latestDateInTable = blockDate;
+          }
         }
       }
     }
     
     var checkDate = new Date();
     if (lastColumnWithData > 0) {
-      var lastDateInTable = sheet.getRange(startRow, lastColumnWithData + 2).getValue();
-      checkDate = new Date(lastDateInTable);
+      checkDate = new Date(latestDateInTable);
       checkDate.setHours(0, 0, 0, 0);
     } else {
       checkDate = new Date(today);
