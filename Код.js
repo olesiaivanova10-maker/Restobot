@@ -22,8 +22,11 @@ var otherRowsHeight = 66;
 function autoClearMonthly() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var today = new Date();
+  today.setHours(0, 0, 0, 0);
   var currentMonth = today.getMonth();
   var currentYear = today.getFullYear();
+  var yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
   
   var allSheets = targetSheetNames.concat(["Доклад"]);
   
@@ -40,9 +43,12 @@ function autoClearMonthly() {
     
     // Ищем блоки, которые не принадлежат текущему месяцу
     for (var c = 0; c < maxCols; c += bWidth) {
-      var dateVal = (sheetName === "Доклад") ? headerRow[c + 1] : headerRow[c + 2];
+      var dateVal = (sheetName === "Доклад") ? headerRow[c] : headerRow[c + 2];
       if (dateVal instanceof Date) {
-        if (dateVal.getMonth() !== currentMonth || dateVal.getFullYear() !== currentYear) {
+        var normalizedDate = new Date(dateVal);
+        normalizedDate.setHours(0, 0, 0, 0);
+        var isYesterday = normalizedDate.getTime() === yesterday.getTime();
+        if (!isYesterday && (dateVal.getMonth() !== currentMonth || dateVal.getFullYear() !== currentYear)) {
           blocksToDelete.push(c + 1); // 1-based index для deleteColumns
         }
       }

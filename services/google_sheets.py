@@ -1,4 +1,5 @@
 import time
+import threading
 from datetime import datetime
 import gspread
 from tenacity import retry, stop_after_attempt, wait_exponential
@@ -16,6 +17,7 @@ from core.config import (
 # --- Кэш для клиента Google Sheets ---
 _cached_sheets_client = None
 _sheets_client_auth_time = 0
+_sheet_block_lock = threading.Lock()
 
 def get_sheets_client():
     """Безопасное получение клиента Google Sheets с кэшированием на 45 минут"""
@@ -121,6 +123,80 @@ def get_block_info(worksheet, target_date: str, report_type: str) -> dict:
         row6 = []
     return get_block_info_from_rows(row1, row6, target_date, report_type)
 
+
+def ensure_report_block(worksheet, sheet_name: str, target_date: str, report_type: str) -> dict:
+    """Создаёт отсутствующий блок даты и расширяет сетку листа перед записью."""
+    info = get_block_info(worksheet, target_date, report_type)
+    if info["found"]:
+        return info
+
+    with _sheet_block_lock:
+        # Другой поток мог создать блок, пока мы ждали lock.
+        info = get_block_info(worksheet, target_date, report_type)
+        if info["found"]:
+            return info
+
+        start_col = info["start_col"]
+        close_steps = KISA_STEPS_CLOSE if sheet_name == LIST_MAPPING["kisa"] else STEPS_CLOSE
+        labels = ["Открытие", *STEPS_OPEN, "Закрытие", *close_steps]
+        block_height = len(labels)
+        required_cols = start_col + 2
+
+        if worksheet.row_count < block_height:
+            worksheet.add_rows(block_height - worksheet.row_count)
+        if worksheet.col_count < required_cols:
+            worksheet.add_cols(required_cols - worksheet.col_count)
+
+        # Копируем оформление первого блока, если он уже существует.
+        if start_col > 1:
+            try:
+                worksheet.spreadsheet.batch_update({
+                    "requests": [{
+                        "copyPaste": {
+                            "source": {
+                                "sheetId": worksheet.id,
+                                "startRowIndex": 0,
+                                "endRowIndex": block_height,
+                                "startColumnIndex": 0,
+                                "endColumnIndex": 3,
+                            },
+                            "destination": {
+                                "sheetId": worksheet.id,
+                                "startRowIndex": 0,
+                                "endRowIndex": block_height,
+                                "startColumnIndex": start_col - 1,
+                                "endColumnIndex": start_col + 2,
+                            },
+                            "pasteType": "PASTE_FORMAT",
+                            "pasteOrientation": "NORMAL",
+                        }
+                    }]
+                })
+            except Exception as exc:
+                logger.warning(f"Не удалось скопировать формат нового блока {sheet_name}: {exc}")
+
+        block_values = [[label, "", ""] for label in labels]
+        block_values[0][2] = target_date
+        block_values[5][2] = target_date
+
+        start_letter = col_to_letter(start_col)
+        end_letter = col_to_letter(start_col + 2)
+        worksheet.update(
+            values=block_values,
+            range_name=f"{start_letter}1:{end_letter}{block_height}",
+        )
+        logger.info(
+            f"Создан отсутствующий блок {target_date} в листе {sheet_name}: "
+            f"{start_letter}:{end_letter}"
+        )
+
+        created_info = get_block_info(worksheet, target_date, report_type)
+        if not created_info["found"]:
+            raise RuntimeError(
+                f"Не удалось создать блок {target_date} в листе {sheet_name}"
+            )
+        return created_info
+
 def get_batch_shift_status(sheet_names: list[str], target_date_open: str, target_date_close: str) -> dict:
     client = get_sheets_client()
     if not client:
@@ -186,7 +262,7 @@ def update_google_sheet(sheet_name: str, report_type: str, collected_data: dict,
         
     current_time = now_vlad().strftime("%H:%M")
     
-    info = get_block_info(worksheet, target_date, report_type)
+    info = ensure_report_block(worksheet, sheet_name, target_date, report_type)
     start_col = info["start_col"]
 
     col_b_let = col_to_letter(start_col + 1)
