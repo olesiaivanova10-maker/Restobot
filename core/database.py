@@ -21,6 +21,18 @@ AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False)
 AsyncSessionLocalTest = async_sessionmaker(test_engine, expire_on_commit=False)
 Base = declarative_base()
 
+SHEET_SYNC_COLUMNS = {
+    "sheet_name": "VARCHAR NOT NULL",
+    "report_type": "VARCHAR NOT NULL",
+    "target_date": "VARCHAR NOT NULL",
+    "payload_json": "TEXT NOT NULL",
+    "is_test": "BOOLEAN DEFAULT 0",
+    "attempts": "INTEGER DEFAULT 0",
+    "next_attempt_at": "VARCHAR NOT NULL",
+    "last_error": "TEXT DEFAULT ''",
+    "created_at": "VARCHAR NOT NULL",
+}
+
 SHIFT_COLUMNS = {
     "is_opened": "BOOLEAN DEFAULT 0",
     "open_time": "VARCHAR DEFAULT ''",
@@ -110,7 +122,27 @@ async def init_db():
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await migrate_shift_schema(conn)
+        await migrate_sheet_sync_schema(conn)
         
     async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await migrate_shift_schema(conn)
+        await migrate_sheet_sync_schema(conn)
+
+
+async def migrate_sheet_sync_schema(conn):
+    await conn.execute(text("""
+        CREATE TABLE IF NOT EXISTS sheet_sync_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sheet_name VARCHAR NOT NULL,
+            report_type VARCHAR NOT NULL,
+            target_date VARCHAR NOT NULL,
+            payload_json TEXT NOT NULL,
+            is_test BOOLEAN DEFAULT 0,
+            attempts INTEGER DEFAULT 0,
+            next_attempt_at VARCHAR NOT NULL,
+            last_error TEXT DEFAULT '',
+            created_at VARCHAR NOT NULL,
+            UNIQUE(sheet_name, report_type, target_date)
+        )
+    """))

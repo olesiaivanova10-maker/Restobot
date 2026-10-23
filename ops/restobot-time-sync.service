@@ -1,0 +1,8 @@
+[Unit]
+Description=Keep Restobot host clock synchronized for Google JWT
+After=chrony.service
+Wants=chrony.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/restobot-time-sync.sh

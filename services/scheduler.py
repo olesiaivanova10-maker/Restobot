@@ -7,6 +7,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from core.logger import logger
 from core.config import ADMIN_ID, now_vlad
 from core.database import DATA_DIR
+from services.sync_worker import process_pending_sheet_syncs
 
 async def backup_database(bot: Bot):
     try:
@@ -50,5 +51,13 @@ def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler()
     # Запуск бэкапа каждый день в 04:00 по серверному времени
     scheduler.add_job(backup_database, 'cron', hour=4, minute=0, args=[bot])
+    scheduler.add_job(process_pending_sheet_syncs, 'interval', minutes=2, id="sheet_sync_prod")
+    scheduler.add_job(
+        process_pending_sheet_syncs,
+        'interval',
+        minutes=2,
+        args=[True],
+        id="sheet_sync_test",
+    )
     
     return scheduler

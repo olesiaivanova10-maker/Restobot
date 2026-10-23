@@ -13,6 +13,7 @@ from services.ai import encode_image_to_base64, get_parsed_report, optimize_imag
 from services.google_sheets import update_google_sheet
 from services.db import mark_shift_open, mark_shift_closed
 from services.error_reporting import notify_admins_about_error, show_generic_report_error
+from services.sync_queue import enqueue_sheet_sync, remove_sheet_sync
 
 reports_router = Router()
 
@@ -349,14 +350,35 @@ async def handle_confirm_report(callback: types.CallbackQuery, state: FSMContext
         else:
             await mark_shift_closed(est_key, collected_data, is_test=is_test)
 
-        await asyncio.to_thread(
-            update_google_sheet,
+        await enqueue_sheet_sync(
             sheet_name,
             report_type,
-            collected_data,
             target_date,
+            collected_data,
+            is_test=is_test,
         )
-        await callback.message.edit_text("✅ Отчёт успешно принят!", reply_markup=None)
+        try:
+            await asyncio.to_thread(
+                update_google_sheet,
+                sheet_name,
+                report_type,
+                collected_data,
+                target_date,
+            )
+            await remove_sheet_sync(sheet_name, report_type, target_date, is_test=is_test)
+            await callback.message.edit_text("✅ Отчёт успешно принят!", reply_markup=None)
+        except Exception as sheet_error:
+            logger.exception(f"Google Sheets временно недоступен: {sheet_error}")
+            await notify_admins_about_error(
+                callback.bot,
+                sheet_error,
+                callback.message,
+                context="Google Sheets поставлен в очередь на повторную синхронизацию",
+            )
+            await callback.message.edit_text(
+                "✅ Отчёт сохранён. Синхронизация с таблицей поставлена в очередь.",
+                reply_markup=None,
+            )
         await state.clear()
     except Exception as e:
         logger.exception(f"Ошибка сохранения отчёта: {e}")

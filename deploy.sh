@@ -40,7 +40,12 @@ scp -o StrictHostKeyChecking=no restobot.zip root@${DEPLOY_HOST}:/root/restobot.
 
 echo "🔧 Запускаем сборку на сервере..."
 ssh -o StrictHostKeyChecking=no root@${DEPLOY_HOST} \
-    "cd /root/restobot && unzip -o /root/restobot.zip && docker compose up -d --build"
+    "cd /root/restobot && unzip -o /root/restobot.zip && \
+    install -m 0755 ops/restobot-time-sync.sh /usr/local/sbin/restobot-time-sync.sh && \
+    install -m 0644 ops/restobot-time-sync.service /etc/systemd/system/restobot-time-sync.service && \
+    install -m 0644 ops/restobot-time-sync.timer /etc/systemd/system/restobot-time-sync.timer && \
+    systemctl daemon-reload && systemctl enable --now restobot-time-sync.timer && \
+    docker compose up -d --build"
 
 # Удаляем локальный архив после деплоя
 rm -f restobot.zip
