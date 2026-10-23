@@ -8,5 +8,6 @@ redis>=5.0.3
 pydantic-settings>=2.2.1
 tenacity>=8.2.3
 sqlalchemy>=2.0.29
+greenlet>=3.0.0
 aiosqlite>=0.20.0
 apscheduler>=3.10.4
