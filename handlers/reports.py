@@ -40,6 +40,15 @@ def get_ai_prompt_key(report_type: str, est_key: str) -> str:
         return "Закрытие:kisa"
     return report_type
 
+async def reply_to_report(message: types.Message, text: str, **kwargs) -> types.Message:
+    try:
+        return await message.reply(text, **kwargs)
+    except TelegramBadRequest as error:
+        if "message to be replied not found" not in error.message.casefold():
+            raise
+        return await message.answer(text, **kwargs)
+
+
 async def ask_missing_items(user_id: int, missing_queue: list[str], message: types.Message, state: FSMContext):
     items_text = "\n".join([f"— {item}" for item in missing_queue])
     text = (
@@ -48,7 +57,7 @@ async def ask_missing_items(user_id: int, missing_queue: list[str], message: typ
         "Пожалуйста, напишите недостающую информацию в <b>одном сообщении</b> (или прикрепите фото)."
     )
     await state.set_state(ReportSteps.waiting_for_missing_item)
-    prompt_message = await message.reply(text, parse_mode="HTML")
+    prompt_message = await reply_to_report(message, text, parse_mode="HTML")
     await state.update_data(service_message_ids=[prompt_message.message_id])
 
 
@@ -115,7 +124,7 @@ async def wait_and_process_user_payload(user_id: int, state: FSMContext):
 async def process_report_payload(messages_packet: list, state: FSMContext):
     message = messages_packet[0]
     user_id = message.from_user.id
-    status_msg = await message.reply("⏳ Изучаю данные...")
+    status_msg = await reply_to_report(message, "⏳ Изучаю данные...")
     
     user_data = await state.get_data()
     accumulated_text = user_data.get("accumulated_text", "")

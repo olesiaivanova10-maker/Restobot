@@ -9,13 +9,16 @@ from core.database import init_db
 from middlewares.whitelist import WhitelistMiddleware
 from handlers.menu import menu_router
 from handlers.reports import reports_router
+from handlers.reviews import reviews_router
 from handlers.errors import errors_router
 from handlers.edit import edit_router
+from services.reviews import init_reviews_db
 from services.scheduler import setup_scheduler
 
 async def main():
     logger.info("--> Начался запуск функции main()...")
     await init_db()
+    await init_reviews_db()
     logger.info("--> База данных SQLite инициализирована.")
     
     # Initialize bot without proxy to avoid connection issues
@@ -28,13 +31,14 @@ async def main():
 
     # Setup Redis Storage
     storage = RedisStorage.from_url(REDIS_URL)
-    dp = Dispatcher(storage=storage)
+    dp = Dispatcher(storage=storage, events_isolation=storage.create_isolation())
     
     # Register middlewares
     dp.message.middleware(WhitelistMiddleware())
     dp.callback_query.middleware(WhitelistMiddleware())
     
     # Register routers
+    dp.include_router(reviews_router)
     dp.include_router(menu_router)
     dp.include_router(reports_router)
     dp.include_router(edit_router)

@@ -1,6 +1,7 @@
 from typing import Callable, Dict, Any, Awaitable
 from aiogram import BaseMiddleware
-from aiogram.types import TelegramObject
+from aiogram.dispatcher.flags import get_flag
+from aiogram.types import Message, TelegramObject
 
 from core.config import ALLOWED_USERS, ALLOWED_GROUPS, GROUP_REST_MAP
 from core.logger import logger
@@ -12,6 +13,9 @@ class WhitelistMiddleware(BaseMiddleware):
         event: TelegramObject,
         data: Dict[str, Any]
     ) -> Any:
+        if isinstance(event, Message) and event.chat.type == "private" and get_flag(data, "public_review"):
+            return await handler(event, data)
+
         # Если списки пустые, временно пускаем всех (защита от дурака)
         if not ALLOWED_USERS and not ALLOWED_GROUPS and not GROUP_REST_MAP:
             return await handler(event, data)
