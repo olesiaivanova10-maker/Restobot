@@ -1,7 +1,9 @@
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 
 import aiosqlite
 
+from core.config import VLZ_TZ
 from core.database import DATA_DIR
 
 REVIEWS_DB = Path(DATA_DIR) / "reviews.db"
@@ -34,3 +36,18 @@ async def save_review(venue: str, body: str, chat_id: int, prompt_id: int) -> No
             (venue, body, chat_id, prompt_id),
         )
         await conn.commit()
+
+
+async def count_reviews_by_venue(day: date) -> dict[str, int]:
+    start = datetime.combine(day, time.min, VLZ_TZ).astimezone(timezone.utc)
+    end = datetime.combine(day + timedelta(days=1), time.min, VLZ_TZ).astimezone(timezone.utc)
+    async with aiosqlite.connect(REVIEWS_DB) as conn:
+        async with conn.execute(
+            """
+            SELECT venue, COUNT(*) FROM reviews
+            WHERE created_at >= ? AND created_at < ?
+            GROUP BY venue
+            """,
+            (start.strftime("%Y-%m-%d %H:%M:%S"), end.strftime("%Y-%m-%d %H:%M:%S")),
+        ) as cursor:
+            return dict(await cursor.fetchall())

@@ -7,6 +7,7 @@ from core.logger import logger
 from core.config import TELEGRAM_TOKEN, REDIS_URL, DEV_GROUP_ID
 from core.database import init_db
 from middlewares.whitelist import WhitelistMiddleware
+from handlers.dashboard import dashboard_router
 from handlers.menu import menu_router
 from handlers.reports import reports_router
 from handlers.reviews import reviews_router
@@ -38,6 +39,7 @@ async def main():
     dp.callback_query.middleware(WhitelistMiddleware())
     
     # Register routers
+    dp.include_router(dashboard_router)
     dp.include_router(reviews_router)
     dp.include_router(menu_router)
     dp.include_router(reports_router)
